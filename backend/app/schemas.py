@@ -28,6 +28,43 @@ class EntryPayload(BaseModel):
     remark: str | None = None
 
 
+class BatchArrangePayload(BaseModel):
+    """批量安排巡检任务：一次提交多条任务，统一指定执行人员与巡检路线。"""
+
+    entry_ids: list[int] = Field(default_factory=list)
+    inspector: str = ""
+    route: str = ""
+    client_token: str | None = None
+
+
+class BatchItemResult(BaseModel):
+    """批量安排中单条任务的处理结果。"""
+
+    entry_id: int
+    ok: bool
+    message: str
+
+
+class BatchArrangeResult(BaseModel):
+    """批量安排整组结果：逐条回报成功或拦截信息。"""
+
+    ok: bool
+    message: str
+    success_count: int
+    failed_count: int
+    results: list[BatchItemResult]
+
+
+class InspectionStats(BaseModel):
+    """巡检任务数量卡片：按内部状态口径统计。"""
+
+    pending: int
+    in_progress: int
+    completed: int
+    missed: int
+    total: int
+
+
 
 class PlantEntry(BaseModel):
     """光伏电站明细结构。"""

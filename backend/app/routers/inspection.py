@@ -5,7 +5,14 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.schemas import ActionResult, EntryPayload, PageResult
+from app.schemas import (
+    ActionResult,
+    BatchArrangePayload,
+    BatchArrangeResult,
+    EntryPayload,
+    InspectionStats,
+    PageResult,
+)
 from app.services.inspection import InspectionService
 
 router = APIRouter(prefix="/api/inspection", tags=["巡检计划"])
@@ -28,6 +35,58 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+@router.get("/stats", response_model=InspectionStats)
+def get_stats() -> InspectionStats:
+    """巡检任务数量卡片：批量安排完成后前端据此重算。"""
+    return InspectionStats(**service.stats())
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出巡检计划清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "inspection", "total": total, "items": items}
+
+
+@router.post("/batch/arrange", response_model=BatchArrangeResult)
+def batch_arrange(payload: BatchArrangePayload) -> BatchArrangeResult:
+    """批量安排执行人员与巡检路线：一次提交多条，逐条返回成功或拦截信息。
+
+    没有勾选任务、执行人员或巡检路线为空时整组拦下；
+    个别任务缺少计划日期只拦截该条，不影响同批其他任务。
+    """
+    if not payload.entry_ids:
+        return BatchArrangeResult(
+            ok=False,
+            message="未选择任何巡检任务，请先勾选需要安排的任务",
+            success_count=0,
+            failed_count=0,
+            results=[],
+        )
+    inspector = payload.inspector.strip()
+    route = payload.route.strip()
+    missing: list[str] = []
+    if not inspector:
+        missing.append("执行人员")
+    if not route:
+        missing.append("巡检路线")
+    if missing:
+        return BatchArrangeResult(
+            ok=False,
+            message=f"批量安排缺少必填信息：{'、'.join(missing)}，未提交任何安排",
+            success_count=0,
+            failed_count=0,
+            results=[],
+        )
+    data = service.batch_arrange(
+        entry_ids=payload.entry_ids,
+        inspector=inspector,
+        route=route,
+        client_token=payload.client_token,
+    )
+    return BatchArrangeResult(**data)
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -56,10 +115,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出巡检计划清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "inspection", "total": total, "items": items}
