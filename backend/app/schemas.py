@@ -28,6 +28,36 @@ class EntryPayload(BaseModel):
     remark: str | None = None
 
 
+class BatchAssignPayload(BaseModel):
+    """批量安排巡检任务：一次提交多条任务 id，统一指定执行人员与巡检路线。
+
+    batch_id 是幂等键：同一次批量动作重复提交（连点、重试）时带同一个值，
+    后端直接复用首次处理结果，不会生成第二份安排。
+    """
+
+    ids: list[int] = Field(default_factory=list)
+    values: dict[str, Any] = Field(default_factory=dict)
+    batch_id: str | None = None
+
+
+class BatchItemResult(BaseModel):
+    """批量安排里单条任务的处理结果：成功或拦截原因都逐条带回。"""
+
+    id: int
+    code: str = ""
+    ok: bool
+    message: str
+
+
+class BatchAssignResult(BaseModel):
+    ok: bool
+    message: str
+    results: list[BatchItemResult] = Field(default_factory=list)
+    succeeded: int = 0
+    blocked: int = 0
+    duplicated: bool = False
+
+
 
 class PlantEntry(BaseModel):
     """光伏电站明细结构。"""
